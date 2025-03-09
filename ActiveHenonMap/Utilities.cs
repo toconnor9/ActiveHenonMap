@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace Man2
 {
@@ -33,9 +34,22 @@ namespace Man2
             }
 
             return new MyPointInt((int)((map_X - MinX) * scaleX),
-                                  (int)((map_Y - MinY) * scaleY),
+                                  (int)((MaxY - map_Y) * scaleY),
                                   pt_color,
                                   diameter);
+        }
+
+        public static MyPoint ConvertFromScreenCoordinates(int image_X, int image_Y)
+        {
+            return ConvertFromScreenCoordinates(new MyPointInt(image_X, image_Y));
+
+            //if (SurfaceWidth == 0 || SurfaceHeight == 0)
+            //{
+            //    throw new Exception("SurfaceWidth and SurfaceHeight must be set before calling ConvertToScreenCoordinates");
+            //}
+
+            //return new MyPoint((((double)image_X / scaleX) + MinX),
+            //                   (MaxY - ((double)image_Y / scaleY)));
         }
 
 
@@ -52,8 +66,8 @@ namespace Man2
                 throw new Exception("SurfaceWidth and SurfaceHeight must be set before calling ConvertToScreenCoordinates");
             }
 
-            double x = (pt.X / scaleX) + MinX;
-            double y = (pt.Y / scaleY) + MinY;
+            double x = ((double)pt.X / scaleX) + MinX;     // (pt.X / scaleX) + MinX;
+            double y = MaxY - ((double)pt.Y / scaleY);     // (pt.Y / scaleY) + MinY;
 
             return new MyPoint(x, y, pt.ptColor, pt.Diameter);
         }

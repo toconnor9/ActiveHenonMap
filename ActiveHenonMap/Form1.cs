@@ -1,5 +1,6 @@
 ﻿using Man2;
 using System;
+using System.CodeDom.Compiler;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -9,6 +10,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using static System.Net.Mime.MediaTypeNames;
 using static System.Windows.Forms.LinkLabel;
 
 namespace ActiveHenonMap
@@ -21,11 +23,21 @@ namespace ActiveHenonMap
         }
 
         private MyPointList myPoints = new MyPointList();
-        private bool calculatingMap = false;
+        private bool _movingMap = false;
         private HenonMapData mapData = new HenonMapData();
         private float _zoom = 50.0f;
         private bool inForm = false;
+        private bool _allowRecalculating = true;
         Dictionary<int, Color> lastSetOfPoints = new Dictionary<int, Color>();
+        private MyPoint _orig_top_left = new MyPoint();
+        private MyPoint _orig_bottom_right = new MyPoint();
+        private Point _lastPosn = new Point();
+
+        private enum enRecalc
+        {
+            Recalculate,
+            DontRecalculate
+        }
 
 
         string _textbox_name = "";
@@ -43,8 +55,48 @@ namespace ActiveHenonMap
 
             Control curr_textbox = GetCurrTextbox(_textbox_name);
 
+            if (_textbox_name == "Graph")
+            {
+                time_since_last = GetTimeSinceLast();
 
-            if (_textbox_name != "" && curr_textbox != null)
+                long msSinceLast = (long)(1000.0 * time_since_last.TotalSeconds);
+
+                if (e.Delta > 0)
+                {
+                    if (msSinceLast < 60)
+                        scroll_amount = 0.75;
+                    else if (msSinceLast < 400)
+                        scroll_amount = 0.85;
+                    else if (msSinceLast < 1000)
+                        scroll_amount = 0.90;
+                    else
+                        scroll_amount = 0.95;
+                }
+                else
+                {
+                    if (msSinceLast < 60)
+                        scroll_amount = 1.25;
+                    else if (msSinceLast < 400)
+                        scroll_amount = 1.15;
+                    else if (msSinceLast < 1000)
+                        scroll_amount = 1.10;
+                    else
+                        scroll_amount = 1.05;
+                }
+
+                int t = pnlMain.Top;
+                int l = pnlMain.Left;
+
+                MyPoint posn_on_map = Utilities.ConvertFromScreenCoordinates(e.X - l, e.Y - t);
+
+                _allowRecalculating = false;
+                txtTop.Text     = (posn_on_map.Y + ((myPoints.MaxY - posn_on_map.Y) * scroll_amount)).ToString("#,0.00#");
+                txtBottom.Text  = (posn_on_map.Y - ((posn_on_map.Y - myPoints.MinY) * scroll_amount)).ToString("#,0.00#");
+                txtLeft.Text    = (posn_on_map.X - ((posn_on_map.X - myPoints.MinX) * scroll_amount)).ToString("#,0.00#");
+                txtRight.Text   = (posn_on_map.X + ((myPoints.MaxX - posn_on_map.X) * scroll_amount)).ToString("#,0.00#");
+                _allowRecalculating = true;
+            }
+            else if (_textbox_name != "" && curr_textbox != null)
             {
                 value_from_control = GetValueFromControl(_textbox_name);
 
@@ -109,7 +161,7 @@ namespace ActiveHenonMap
                     _zoom = 10.0f;
             }
 
-            PlotHenonMap(true);
+            PlotHenonMap(enRecalc.Recalculate);
         }
 
 
@@ -179,6 +231,9 @@ namespace ActiveHenonMap
                 case "txtPointsPerOrbit":
                     curr_textbox = txtPointsPerOrbit;
                     break;
+                case "Graph":
+                    curr_textbox = pnlMain;
+                    break;
                 default:
                     break;
             }
@@ -230,17 +285,17 @@ namespace ActiveHenonMap
                         MessageBox.Show("File is not in the correct format");
                         return;
                     }
-                    txtPhaseAngle.Text = ValuesToLoad[0];
-                    txtRight.Text = ValuesToLoad[1];
-                    txtLeft.Text = ValuesToLoad[2];
-                    txtTop.Text = ValuesToLoad[3];
-                    txtBottom.Text = ValuesToLoad[4];
-                    txtStartingX.Text = ValuesToLoad[5];
-                    txtStartingY.Text = ValuesToLoad[6];
-                    txtIncrementX.Text = ValuesToLoad[7];
-                    txtIncrementY.Text = ValuesToLoad[8];
-                    txtNumOrbits.Text = ValuesToLoad[9];
-                    txtPointsPerOrbit.Text = ValuesToLoad[10]; ;
+                    txtPhaseAngle.Text      = ValuesToLoad[0];
+                    txtRight.Text           = ValuesToLoad[1];
+                    txtLeft.Text            = ValuesToLoad[2];
+                    txtTop.Text             = ValuesToLoad[3];
+                    txtBottom.Text          = ValuesToLoad[4];
+                    txtStartingX.Text       = ValuesToLoad[5];
+                    txtStartingY.Text       = ValuesToLoad[6];
+                    txtIncrementX.Text      = ValuesToLoad[7];
+                    txtIncrementY.Text      = ValuesToLoad[8];
+                    txtNumOrbits.Text       = ValuesToLoad[9];
+                    txtPointsPerOrbit.Text  = ValuesToLoad[10];
                 }
                 catch (IOException)
                 {
@@ -270,165 +325,27 @@ namespace ActiveHenonMap
             }
         }
 
-        private void Draw_Point_Dataset(Panel pnlMain, MyPointIntList points)
-        {
-            Bitmap bmp = new Bitmap(pnlMain.Width, pnlMain.Height);
-
-            try
-            {
-                if (pnlMain != null && pnlMain.Visible == true)
-                {
-                    using (Graphics g = Graphics.FromImage(bmp))
-                    {
-                        foreach (MyPointInt pt in points.points)
-                        {
-                            if (pt.X >= 0 && pt.X < pnlMain.Width && pt.Y >= 0 && pt.Y < pnlMain.Height)
-                            {
-                                SolidBrush currColor = new SolidBrush(pt.ptColor);
-
-                                g.FillRectangle(currColor, pt.X, pt.Y, pt.Diameter, pt.Diameter);
-                            }
-                        }
-                    }
-
-                    pnlMain.BackgroundImage = bmp;
-                    pnlMain.Refresh();
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("ERROR: " + ex.Message, "Error Plotting Data", MessageBoxButtons.OK);
-                throw;
-            }
-        }
-
-        /// <summary>
-        /// Put the points on the panel
-        /// </summary>
-        /// <returns>The bitmap of the points</returns>
-        private void Draw_Line_Dataset(Panel pnlMain, MyLineIntList axes)
-        {
-            try
-            {
-                using (Graphics g = Graphics.FromImage(pnlMain.BackgroundImage))
-                {
-                    foreach (MyLineInt ln in axes.Lines)
-                    {
-                        if (ln.Start.X >= 0 && ln.Start.X < pnlMain.Width && ln.Start.Y >= 0 && ln.Start.Y < pnlMain.Height)
-                        {
-                            SolidBrush currColor = new SolidBrush(ln.LineColor);
-
-                            g.DrawLine(new Pen(ln.LineColor, ln.LineWidth), ln.Start.X, ln.Start.Y, ln.End.X, ln.End.Y);
-                        }
-                    }
-
-                    pnlMain.Refresh();
-                }
-
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("ERROR: " + ex.Message, "Error Plotting Data", MessageBoxButtons.OK);
-                throw;
-            }
-        }
-
-        /// <summary>
-        /// Calculate the points of the Henon map
-        /// </summary>
-        /// <returns>True if it was able to convert it</returns>
-        private bool PlotHenonMap(bool recalculating)
-        {
-            bool it_worked = false;
-            MyLineList myLines = new MyLineList(); 
-
-            mapData = new HenonMapData();
-
-            try
-            {
-                mapData = new HenonMapData(txtPhaseAngle.Text,
-                                           txtStartingX.Text, txtStartingY.Text,
-                                           txtIncrementX.Text, txtIncrementY.Text,
-                                           txtNumOrbits.Text, txtPointsPerOrbit.Text);
-
-                if (recalculating)
-                {
-                    myPoints = HenonMap.Calculate(mapData);
-                }
-
-                myPoints.MinX = TextToDouble(txtLeft.Text);
-                myPoints.MaxX = TextToDouble(txtRight.Text);
-                myPoints.MinY = TextToDouble(txtTop.Text);
-                myPoints.MaxY = TextToDouble(txtBottom.Text);
-
-
-                // If the 'Y' axis is in the frame, add it here
-                if (myPoints.MinX < 0 && myPoints.MaxX > 0)
-                    myLines.Add(new MyLine(0, myPoints.MinY, 0, myPoints.MaxY, Color.Blue, 3));
-
-                // If the 'X' axis is in the frame, add it here
-                if (myPoints.MinY < 0 && myPoints.MaxY > 0)
-                    myLines.Add(new MyLine(0, myPoints.MinX, 0, myPoints.MaxX, Color.Blue, 3));
-
-
-                MyPointIntList pointsOnScreen = myPoints.ConvertThisListToScreenCoordinates(pnlMain.Width, pnlMain.Height);
-                Draw_Point_Dataset(pnlMain, pointsOnScreen);
-
-                it_worked = true;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"ERROR: [{ex.Message}]");
-                it_worked = false;
-            }
-
-            return it_worked;
-        }
-
-        /// <summary>
-        /// Try to convert the text passed in to a double
-        /// </summary>
-        /// <param name="text2Convert">Text to convert</param>
-        private double TextToDouble(string text2Convert)
-        {
-            double val = 0.0;
-            if (double.TryParse(text2Convert, out val))
-                return val;
-            else
-                return 0.0;
-        }
-
-        /// <summary>
-        /// Try to convert the text passed in to an integer
-        /// </summary>
-        /// <param name="text2Convert">Text to convert</param>
-        private int TextToInt(string text2Convert)
-        {
-            int val = 0;
-            if (int.TryParse(text2Convert, out val))
-                return val;
-            else
-                return 0;
-        }
-
         private void TextBoxChanged(object sender, EventArgs e)
         {
-            if (((Control)sender).Name == "txtTop"    ||
-                ((Control)sender).Name == "txtBottom" ||
-                ((Control)sender).Name == "txtLeft"   ||
-                ((Control)sender).Name == "txtRight"    )
+            if (_allowRecalculating)
             {
-                PlotHenonMap(false);
-            }
-            else
-            {
-                PlotHenonMap(true);
+                if (((Control)sender).Name == "txtTop" ||
+                    ((Control)sender).Name == "txtBottom" ||
+                    ((Control)sender).Name == "txtLeft" ||
+                    ((Control)sender).Name == "txtRight")
+                {
+                    PlotHenonMap(enRecalc.DontRecalculate);
+                }
+                else
+                {
+                    PlotHenonMap(enRecalc.Recalculate);
+                }
             }
         }
 
         private void Form1_Shown(object sender, EventArgs e)
         {
-            PlotHenonMap(true);
+            PlotHenonMap(enRecalc.Recalculate);
         }
 
         private void btnSave_Click_1(object sender, EventArgs e)
@@ -503,22 +420,47 @@ namespace ActiveHenonMap
             this.Refresh();
         }
 
-        private void pnlMain_MouseMove(object sender, MouseEventArgs e)
+        private void pnlMain_MouseDown(object sender, MouseEventArgs e)
         {
-            DrawPointsAndAxes(e);
+            _movingMap = true;
+
+            _lastPosn.X = e.X;
+            _lastPosn.Y = e.Y;
         }
 
-        private void showLocation(object sender, EventArgs e)
+        private void pnlMain_MouseMove(object sender, MouseEventArgs e)
         {
+        }
+
+        private void pnlMain_MouseUp(object sender, MouseEventArgs e)
+        {
+            double dX = (e.X - _lastPosn.X);
+            double dY = (e.Y - _lastPosn.Y);
+
+
+            if (_movingMap)
+            {
+                MoveGraph(dX, dY);
+
+                _lastPosn.X = e.X;
+                _lastPosn.Y = e.Y;
+
+                MyPointIntList pointsOnScreen = myPoints.ConvertThisListToScreenCoordinates(pnlMain.Width, pnlMain.Height);
+                Draw_Point_Dataset(pnlMain, pointsOnScreen);
+            }
+
+            _movingMap = false;
         }
 
         private void pnlMain_MouseEnter(object sender, EventArgs e)
         {
+            _textbox_name = "Graph";
             inForm = true;
         }
 
         private void pnlMain_MouseLeave(object sender, EventArgs e)
         {
+            _textbox_name = "";
             inForm = false;
         }
 
@@ -529,30 +471,205 @@ namespace ActiveHenonMap
                 ((Control)sender).Name == "txtLeft" ||
                 ((Control)sender).Name == "txtRight")
             {
-                PlotHenonMap(false);
+                PlotHenonMap(enRecalc.DontRecalculate);
             }
             else
             {
-                PlotHenonMap(true);
+                PlotHenonMap(enRecalc.Recalculate);
+            }
+        }
+
+
+
+        #region Private Methods
+
+        private void Draw_Point_Dataset(Panel pnlMain, MyPointIntList points)
+        {
+            Bitmap bmp = new Bitmap(pnlMain.Width, pnlMain.Height);
+
+            try
+            {
+                if (pnlMain != null && pnlMain.Visible == true)
+                {
+                    using (Graphics g = Graphics.FromImage(bmp))
+                    {
+                        foreach (MyPointInt pt in points.points)
+                        {
+                            if (pt.X >= 0 && pt.X < pnlMain.Width && pt.Y >= 0 && pt.Y < pnlMain.Height)
+                            {
+                                SolidBrush currColor = new SolidBrush(pt.ptColor);
+
+                                g.FillRectangle(currColor, pt.X, pt.Y, pt.Diameter, pt.Diameter);
+                            }
+                        }
+                    }
+
+                    pnlMain.BackgroundImage = bmp;
+                    pnlMain.Refresh();
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("ERROR: " + ex.Message, "Error Plotting Data", MessageBoxButtons.OK);
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Put the points on the panel
+        /// </summary>
+        /// <returns>The bitmap of the points</returns>
+        private void Draw_Line_Dataset(Panel pnlMain, MyLineIntList axes)
+        {
+            try
+            {
+                using (Graphics g = Graphics.FromImage(pnlMain.BackgroundImage))
+                {
+                    foreach (MyLineInt ln in axes.Lines)
+                    {
+                        if (ln.Start.X >= 0 && ln.Start.X < pnlMain.Width && ln.Start.Y >= 0 && ln.Start.Y < pnlMain.Height)
+                        {
+                            SolidBrush currColor = new SolidBrush(ln.LineColor);
+
+                            g.DrawLine(new Pen(ln.LineColor, ln.LineWidth), ln.Start.X, ln.Start.Y, ln.End.X, ln.End.Y);
+                        }
+                    }
+
+                    pnlMain.Refresh();
+                }
+
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("ERROR: " + ex.Message, "Error Plotting Data", MessageBoxButtons.OK);
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Calculate the points of the Henon map
+        /// </summary>
+        /// <returns>True if it was able to convert it</returns>
+        private bool PlotHenonMap(enRecalc recalculating)
+        {
+            bool it_worked = false;
+            MyLineList myLines = new MyLineList();
+
+            mapData = new HenonMapData();
+
+            try
+            {
+                mapData = new HenonMapData(txtPhaseAngle.Text,
+                                           txtStartingX.Text, txtStartingY.Text,
+                                           txtIncrementX.Text, txtIncrementY.Text,
+                                           txtNumOrbits.Text, txtPointsPerOrbit.Text);
+
+                if (recalculating == enRecalc.Recalculate)
+                {
+                    myPoints = HenonMap.Calculate(mapData);
+                }
+
+                myPoints.MinX = TextToDouble(txtLeft.Text);
+                myPoints.MaxX = TextToDouble(txtRight.Text);
+                myPoints.MinY = TextToDouble(txtBottom.Text);
+                myPoints.MaxY = TextToDouble(txtTop.Text);
+
+
+                // If the 'Y' axis is in the frame, add it here
+                if (myPoints.MinX < 0 && myPoints.MaxX > 0)
+                    myLines.Add(new MyLine(0, myPoints.MinY, 0, myPoints.MaxY, Color.Blue, 3));
+
+                // If the 'X' axis is in the frame, add it here
+                if (myPoints.MinY < 0 && myPoints.MaxY > 0)
+                    myLines.Add(new MyLine(0, myPoints.MinX, 0, myPoints.MaxX, Color.Blue, 3));
+
+
+                MyPointIntList pointsOnScreen = myPoints.ConvertThisListToScreenCoordinates(pnlMain.Width, pnlMain.Height);
+                Draw_Point_Dataset(pnlMain, pointsOnScreen);
+
+                it_worked = true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ERROR: [{ex.Message}]");
+                it_worked = false;
+            }
+
+            return it_worked;
+        }
+
+        /// <summary>
+        /// Try to convert the text passed in to a double
+        /// </summary>
+        /// <param name="text2Convert">Text to convert</param>
+        private double TextToDouble(string text2Convert)
+        {
+            double val = 0.0;
+            if (double.TryParse(text2Convert, out val))
+                return val;
+            else
+                return 0.0;
+        }
+
+        /// <summary>
+        /// Try to convert the text passed in to an integer
+        /// </summary>
+        /// <param name="text2Convert">Text to convert</param>
+        private int TextToInt(string text2Convert)
+        {
+            int val = 0;
+            if (int.TryParse(text2Convert, out val))
+                return val;
+            else
+                return 0;
+        }
+
+        private void MoveGraph(double dX, double dY)
+        {
+            double dist_moved = Math.Sqrt((dX * dX) + (dY * dY));
+            if (dist_moved > 0)
+            {
+                double dX_on_map = dX / Utilities.scaleX;
+                double dY_on_map = dY / Utilities.scaleY;
+
+                GetScreenValues();
+
+                double l = (Utilities.MinX + dX_on_map);
+                double r = (Utilities.MaxX + dX_on_map);
+                double t = (Utilities.MaxY + dY_on_map);
+                double b = (Utilities.MinY + dY_on_map);
+                txtTop.Text     = t.ToString("0.000"); txtTop.Refresh();
+                txtBottom.Text  = b.ToString("0.000"); txtBottom.Refresh();
+                txtRight.Text   = r.ToString("0.000"); txtRight.Refresh();
+                txtLeft.Text    = l.ToString("0.000"); txtLeft.Refresh();
+
+                myPoints.MinX = l;
+                myPoints.MaxX = r;
+                myPoints.MinY = b;
+                myPoints.MaxY = t;
+
+                MyPointIntList pointsOnScreen = myPoints.ConvertThisListToScreenCoordinates(pnlMain.Width, pnlMain.Height);
+                Draw_Point_Dataset(pnlMain, pointsOnScreen);
+
+                Console.WriteLine($"Moved {dist_moved.ToString("#,0")} or {dX_on_map}, {dY_on_map}");
             }
         }
 
         private void DrawPointsAndAxes(MouseEventArgs e)
         {
             MyLineIntList nearbyPoints = new MyLineIntList();
-            double range = 10;
             Graphics g = pnlMain.CreateGraphics();
 
             GetScreenValues();
 
             MyPoint map_cursor_location = Utilities.ConvertFromScreenCoordinates(new MyPointInt(e.X, e.Y, Color.Black, 1));
 
-            PaintCursorCircle(new Point(e.X, e.Y));
+            // PaintCursorCircle(new Point(e.X, e.Y));
 
             // Draw_Line_Dataset(pnlMain, myPoints.ConvertThisListToScreenCoordinates(pnlMain.Width, pnlMain.Height));
 
             // txtlocation.Text = $"# points: {pointsToColor.Count}\r\nX: {map_cursor_location.X.ToString("#,0.000")}, Y: {map_cursor_location.Y.ToString("#,0.000")}\r\nrange: {range}\r\nZoom: {_zoom}";
-            txtlocation.Refresh();
+            // txtlocation.Refresh();
         }
 
         private void ShowPopUp(string TextToShow, string Title)
@@ -607,5 +724,7 @@ namespace ActiveHenonMap
                 this.myPoints.points[pointsToColor[i]].ptColor = Color.Pink;
             }
         }
+
+        #endregion
     }
 }

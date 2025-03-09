@@ -30,10 +30,7 @@ namespace Man2
                     currX = (lastX * COSA) - ((lastY - (lastX * lastX)) * SINA);
                     currY = (lastX * SINA) + ((lastY - (lastX * lastX)) * COSA);
 
-                    if (I > 0)
-                        currPoint = new MyPoint(currX, currY, Color.Black, 1);
-                    else
-                        currPoint = new MyPoint(currX, currY, Color.Blue, 5);
+                    currPoint = new MyPoint(currX, currY, Color.Black, 1);
 
                     allPoints.points.Add(currPoint);
 
