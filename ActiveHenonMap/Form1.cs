@@ -43,6 +43,10 @@ namespace ActiveHenonMap
         string _textbox_name = "";
         DateTime _Last_time = new DateTime();
 
+
+
+        #region Events
+
         private void Form_MouseScroll(object sender, System.Windows.Forms.MouseEventArgs e)
         {
             // string text_from_control = "";
@@ -107,7 +111,7 @@ namespace ActiveHenonMap
                 if (_textbox_name != "txtNumOrbits" &&
                     _textbox_name != "txtPointsPerOrbit")
                 {
-                    Console.WriteLine("msSinceLast: " + msSinceLast.ToString());
+                    // Console.WriteLine("msSinceLast: " + msSinceLast.ToString());
 
                     if (msSinceLast < 60)
                         scroll_amount = 0.04;
@@ -120,7 +124,7 @@ namespace ActiveHenonMap
 
                     if (scroll_amount > 0)
                     {
-                        scroll_amount *= (double)(e.Delta / 120);
+                        scroll_amount *= (double)(e.Delta / 120);   // This establishes whether the mouse wheel was going up or down
 
                         curr_textbox.Text = (value_from_control + scroll_amount).ToString("0.0000");
                     }
@@ -138,7 +142,7 @@ namespace ActiveHenonMap
 
                     if (scroll_amount > 0)
                     {
-                        scroll_amount *= (double)(e.Delta / 120);
+                        scroll_amount *= (double)(e.Delta / 120);   // This establishes whether the mouse wheel was going up or down
 
                         curr_textbox.Text = (value_from_control + scroll_amount).ToString("0");
                     }
@@ -161,7 +165,7 @@ namespace ActiveHenonMap
                     _zoom = 10.0f;
             }
 
-            PlotHenonMap(enRecalc.Recalculate);
+            PlotHenonMap(enRecalc.DontRecalculate);
         }
 
 
@@ -430,11 +434,25 @@ namespace ActiveHenonMap
 
         private void pnlMain_MouseMove(object sender, MouseEventArgs e)
         {
+            double dX = (_lastPosn.X - e.X);
+            double dY = (e.Y - _lastPosn.Y);
+
+
+            if (_movingMap)
+            {
+                MoveGraph(dX, dY);
+
+                _lastPosn.X = e.X;
+                _lastPosn.Y = e.Y;
+
+                MyPointIntList pointsOnScreen = myPoints.ConvertThisListToScreenCoordinates(pnlMain.Width, pnlMain.Height);
+                Draw_Point_Dataset(pnlMain, pointsOnScreen);
+            }
         }
 
         private void pnlMain_MouseUp(object sender, MouseEventArgs e)
         {
-            double dX = (e.X - _lastPosn.X);
+            double dX = (_lastPosn.X - e.X);
             double dY = (e.Y - _lastPosn.Y);
 
 
@@ -469,7 +487,8 @@ namespace ActiveHenonMap
             if (((Control)sender).Name == "txtTop" ||
                 ((Control)sender).Name == "txtBottom" ||
                 ((Control)sender).Name == "txtLeft" ||
-                ((Control)sender).Name == "txtRight")
+                ((Control)sender).Name == "txtRight" ||
+                ((Control)sender).Name == "pnlMain")
             {
                 PlotHenonMap(enRecalc.DontRecalculate);
             }
@@ -479,6 +498,8 @@ namespace ActiveHenonMap
             }
         }
 
+
+#endregion
 
 
         #region Private Methods
@@ -651,7 +672,7 @@ namespace ActiveHenonMap
                 MyPointIntList pointsOnScreen = myPoints.ConvertThisListToScreenCoordinates(pnlMain.Width, pnlMain.Height);
                 Draw_Point_Dataset(pnlMain, pointsOnScreen);
 
-                Console.WriteLine($"Moved {dist_moved.ToString("#,0")} or {dX_on_map}, {dY_on_map}");
+                // Console.WriteLine($"Moved {dist_moved.ToString("#,0")} or {dX_on_map}, {dY_on_map}");
             }
         }
 
