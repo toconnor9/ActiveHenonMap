@@ -51,11 +51,10 @@ namespace Man2
                                             int numberOfOrbits, int pointsPerOrbit)
         {
             MyPointList allPoints = new MyPointList();
-            HenonMapData data = new HenonMapData(phaseAngle.ToString(),
-                                                 startingPtX.ToString(),    startingPtY.ToString(),
-                                                 incrementX.ToString(),     incrementY.ToString(),
-                                                 numberOfOrbits.ToString(), pointsPerOrbit.ToString());
-
+            HenonMapData data = new HenonMapData(phaseAngle,
+                                                 startingPtX,    startingPtY,
+                                                 incrementX,     incrementY,
+                                                 numberOfOrbits, pointsPerOrbit);
 
             return Calculate(data);
         }

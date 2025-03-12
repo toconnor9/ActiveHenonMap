@@ -29,8 +29,6 @@ namespace ActiveHenonMap
         private bool inForm = false;
         private bool _allowRecalculating = true;
         Dictionary<int, Color> lastSetOfPoints = new Dictionary<int, Color>();
-        private MyPoint _orig_top_left = new MyPoint();
-        private MyPoint _orig_bottom_right = new MyPoint();
         private Point _lastPosn = new Point();
 
         private enum enRecalc
@@ -42,6 +40,8 @@ namespace ActiveHenonMap
 
         string _textbox_name = "";
         DateTime _Last_time = new DateTime();
+        List<HenonMapData> history = new List<HenonMapData>();
+        int ptrHistory = -1;
 
 
 
@@ -94,11 +94,19 @@ namespace ActiveHenonMap
                 MyPoint posn_on_map = Utilities.ConvertFromScreenCoordinates(e.X - l, e.Y - t);
 
                 _allowRecalculating = false;
-                txtTop.Text     = (posn_on_map.Y + ((myPoints.MaxY - posn_on_map.Y) * scroll_amount)).ToString("#,0.00#");
-                txtBottom.Text  = (posn_on_map.Y - ((posn_on_map.Y - myPoints.MinY) * scroll_amount)).ToString("#,0.00#");
-                txtLeft.Text    = (posn_on_map.X - ((posn_on_map.X - myPoints.MinX) * scroll_amount)).ToString("#,0.00#");
-                txtRight.Text   = (posn_on_map.X + ((myPoints.MaxX - posn_on_map.X) * scroll_amount)).ToString("#,0.00#");
+                txtTop.Text     = (posn_on_map.Y + ((mapData.MaxY - posn_on_map.Y) * scroll_amount)).ToString("#,0.00#");
+                txtBottom.Text  = (posn_on_map.Y - ((posn_on_map.Y - mapData.MinY) * scroll_amount)).ToString("#,0.00#");
+                txtLeft.Text    = (posn_on_map.X - ((posn_on_map.X - mapData.MinX) * scroll_amount)).ToString("#,0.00#");
+                txtRight.Text   = (posn_on_map.X + ((mapData.MaxX - posn_on_map.X) * scroll_amount)).ToString("#,0.00#");
                 _allowRecalculating = true;
+
+                GetScreenValues();
+
+                if (history.Count > ptrHistory)
+                    history.RemoveRange(ptrHistory, history.Count - ptrHistory);
+
+                history.Add(mapData);
+                ptrHistory++;
             }
             else if (_textbox_name != "" && curr_textbox != null)
             {
@@ -167,7 +175,6 @@ namespace ActiveHenonMap
 
             PlotHenonMap(enRecalc.DontRecalculate);
         }
-
 
         private double GetValueFromControl(string control_name)
         {
@@ -333,6 +340,14 @@ namespace ActiveHenonMap
         {
             if (_allowRecalculating)
             {
+                GetScreenValues();
+
+                if (history.Count > ptrHistory)
+                    history.RemoveRange(ptrHistory, history.Count - ptrHistory);
+
+                history.Add(mapData);
+                ptrHistory++;
+
                 if (((Control)sender).Name == "txtTop" ||
                     ((Control)sender).Name == "txtBottom" ||
                     ((Control)sender).Name == "txtLeft" ||
@@ -422,6 +437,17 @@ namespace ActiveHenonMap
         {
             this.WindowState = FormWindowState.Maximized;
             this.Refresh();
+
+            if (ptrHistory == -1)
+            {
+                HenonMapData startingPt = new HenonMapData(txtPhaseAngle.Text, txtStartingX.Text, txtStartingY.Text, txtIncrementX.Text, txtIncrementY.Text,
+                                                           txtNumOrbits.Text, txtPointsPerOrbit.Text, txtBottom.Text, txtTop.Text, txtLeft.Text, txtRight.Text,
+                                                           pnlMain.Width.ToString(), pnlMain.Height.ToString());
+
+                history = new List<HenonMapData>();
+                history.Add(startingPt);
+                ptrHistory = 1;
+            }
         }
 
         private void pnlMain_MouseDown(object sender, MouseEventArgs e)
@@ -430,6 +456,8 @@ namespace ActiveHenonMap
 
             _lastPosn.X = e.X;
             _lastPosn.Y = e.Y;
+
+            Console.WriteLine($"MouseDown ({e.X}, {e.Y})");
         }
 
         private void pnlMain_MouseMove(object sender, MouseEventArgs e)
@@ -445,7 +473,7 @@ namespace ActiveHenonMap
                 _lastPosn.X = e.X;
                 _lastPosn.Y = e.Y;
 
-                MyPointIntList pointsOnScreen = myPoints.ConvertThisListToScreenCoordinates(pnlMain.Width, pnlMain.Height);
+                MyPointIntList pointsOnScreen = myPoints.ConvertThisListToScreenCoordinates(pnlMain.Width, pnlMain.Height, mapData);
                 Draw_Point_Dataset(pnlMain, pointsOnScreen);
             }
         }
@@ -463,7 +491,9 @@ namespace ActiveHenonMap
                 _lastPosn.X = e.X;
                 _lastPosn.Y = e.Y;
 
-                MyPointIntList pointsOnScreen = myPoints.ConvertThisListToScreenCoordinates(pnlMain.Width, pnlMain.Height);
+                Console.WriteLine($"MouseUp ({e.X}, {e.Y})");
+
+                MyPointIntList pointsOnScreen = myPoints.ConvertThisListToScreenCoordinates(pnlMain.Width, pnlMain.Height, mapData);
                 Draw_Point_Dataset(pnlMain, pointsOnScreen);
             }
 
@@ -498,8 +528,76 @@ namespace ActiveHenonMap
             }
         }
 
+        private void btnRestartOnOrbitX_Click(object sender, EventArgs e)
+        {
+            int maxNumberOfOrbits = 0;
+            int orbitChosen = 0;
+            frmInput frmRestart = new frmInput();
 
-#endregion
+
+            if (int.TryParse(txtNumOrbits.Text, out maxNumberOfOrbits))
+            {
+                frmRestart.Title = "Get New Starting Point";
+                frmRestart.Prompt = $"What orbit do you want to restart on? (0 - {maxNumberOfOrbits - 1})";
+                frmRestart.MinimumValue = 0;
+                frmRestart.MaximumValue = maxNumberOfOrbits - 1;
+                frmRestart.DefaultValue = "0";
+
+                if (frmRestart.ShowDialog() == DialogResult.OK)
+                {
+                    if (int.TryParse(frmRestart.ValueGiven(), out orbitChosen))
+                    {
+                        MyPoint startingPt = myPoints.points[orbitChosen * mapData.PtsPerOrbit];
+
+                        this.txtStartingX.Text = startingPt.X.ToString("0.000");
+                        this.txtStartingY.Text = startingPt.Y.ToString("0.000");
+                        mapData.StartingX = startingPt.X;
+                        mapData.StartingY = startingPt.Y;
+                    }
+                }
+            }
+        }
+
+        private void Form1_KeyDown(object sender, KeyEventArgs e)
+        {
+            HenonMapData X = new HenonMapData();
+
+
+            if (e.KeyCode == Keys.Z && Control.ModifierKeys == Keys.Control)
+            {
+                Console.WriteLine(e.KeyCode);
+
+                // Check if ptrHistory > 1
+                if (ptrHistory > 1)
+                {
+                    // Decrement the ptrHistory 
+                    X = history[--ptrHistory].Clone();
+
+                    // Put the data from history[ptrHistory] on the form
+                    SetScreenValues(X.PhaseAngle, X.StartingX, X.StartingY, X.IncrementX, X.IncrementY,
+                                    X.NumOrbits, X.PtsPerOrbit, X.MinX, X.MaxX, X.MinY, X.MaxY);
+                }
+            }
+
+            if (e.KeyCode == Keys.Y && Control.ModifierKeys == Keys.Control)
+            {
+                Console.WriteLine(e.KeyCode);
+
+                // Check if ptrHistory history.Count
+                if (ptrHistory < history.Count)
+                {
+                    // Increment the ptrHistory
+                    X = history[++ptrHistory].Clone();
+
+                    // Put the data from history[ptrHistory] on the form
+                    SetScreenValues(X.PhaseAngle, X.StartingX, X.StartingY, X.IncrementX, X.IncrementY,
+                                    X.NumOrbits, X.PtsPerOrbit, X.MinX, X.MaxX, X.MinY, X.MaxY);
+                }
+            }
+        }
+
+
+        #endregion
 
 
         #region Private Methods
@@ -583,29 +681,28 @@ namespace ActiveHenonMap
                 mapData = new HenonMapData(txtPhaseAngle.Text,
                                            txtStartingX.Text, txtStartingY.Text,
                                            txtIncrementX.Text, txtIncrementY.Text,
-                                           txtNumOrbits.Text, txtPointsPerOrbit.Text);
+                                           txtNumOrbits.Text, txtPointsPerOrbit.Text,
+                                           txtLeft.Text, txtRight.Text,
+                                           txtBottom.Text, txtTop.Text,
+                                           pnlMain.Width.ToString(),
+                                           pnlMain.Height.ToString());
 
                 if (recalculating == enRecalc.Recalculate)
                 {
                     myPoints = HenonMap.Calculate(mapData);
                 }
 
-                myPoints.MinX = TextToDouble(txtLeft.Text);
-                myPoints.MaxX = TextToDouble(txtRight.Text);
-                myPoints.MinY = TextToDouble(txtBottom.Text);
-                myPoints.MaxY = TextToDouble(txtTop.Text);
-
 
                 // If the 'Y' axis is in the frame, add it here
-                if (myPoints.MinX < 0 && myPoints.MaxX > 0)
-                    myLines.Add(new MyLine(0, myPoints.MinY, 0, myPoints.MaxY, Color.Blue, 3));
+                if (mapData.MinX < 0 && mapData.MaxX > 0)
+                    myLines.Add(new MyLine(0, mapData.MinY, 0, mapData.MaxY, Color.Blue, 3));
 
                 // If the 'X' axis is in the frame, add it here
-                if (myPoints.MinY < 0 && myPoints.MaxY > 0)
-                    myLines.Add(new MyLine(0, myPoints.MinX, 0, myPoints.MaxX, Color.Blue, 3));
+                if (mapData.MinY < 0 && mapData.MaxY > 0)
+                    myLines.Add(new MyLine(0, mapData.MinX, 0, mapData.MaxX, Color.Blue, 3));
 
 
-                MyPointIntList pointsOnScreen = myPoints.ConvertThisListToScreenCoordinates(pnlMain.Width, pnlMain.Height);
+                MyPointIntList pointsOnScreen = myPoints.ConvertThisListToScreenCoordinates(pnlMain.Width, pnlMain.Height, mapData);
                 Draw_Point_Dataset(pnlMain, pointsOnScreen);
 
                 it_worked = true;
@@ -653,23 +750,31 @@ namespace ActiveHenonMap
                 double dX_on_map = dX / Utilities.scaleX;
                 double dY_on_map = dY / Utilities.scaleY;
 
-                GetScreenValues();
+                // GetScreenValues();
 
-                double l = (Utilities.MinX + dX_on_map);
-                double r = (Utilities.MaxX + dX_on_map);
-                double t = (Utilities.MaxY + dY_on_map);
-                double b = (Utilities.MinY + dY_on_map);
+                double l = (mapData.MinX + dX_on_map);
+                double r = (mapData.MaxX + dX_on_map);
+                double t = (mapData.MaxY + dY_on_map);
+                double b = (mapData.MinY + dY_on_map);
+
                 txtTop.Text     = t.ToString("0.000"); txtTop.Refresh();
                 txtBottom.Text  = b.ToString("0.000"); txtBottom.Refresh();
                 txtRight.Text   = r.ToString("0.000"); txtRight.Refresh();
                 txtLeft.Text    = l.ToString("0.000"); txtLeft.Refresh();
 
-                myPoints.MinX = l;
-                myPoints.MaxX = r;
-                myPoints.MinY = b;
-                myPoints.MaxY = t;
+                mapData.MinX = l;
+                mapData.MaxX = r;
+                mapData.MinY = b;
+                mapData.MaxY = t;
 
-                MyPointIntList pointsOnScreen = myPoints.ConvertThisListToScreenCoordinates(pnlMain.Width, pnlMain.Height);
+                Utilities.MinX = l;
+                Utilities.MaxX = r;
+                Utilities.MinY = b;
+                Utilities.MaxY = t;
+
+                Console.WriteLine($"MoveGraph({dX}, {dY}) ==> ({dX_on_map.ToString("0.00")}, {dY_on_map.ToString("0.00")})  &  (l,r,t,b): ({l.ToString("0.00")}, {r.ToString("0.00")}, {t.ToString("0.00")}, {b.ToString("0.00")})");
+
+                MyPointIntList pointsOnScreen = myPoints.ConvertThisListToScreenCoordinates(pnlMain.Width, pnlMain.Height, mapData);
                 Draw_Point_Dataset(pnlMain, pointsOnScreen);
 
                 // Console.WriteLine($"Moved {dist_moved.ToString("#,0")} or {dX_on_map}, {dY_on_map}");
@@ -687,7 +792,7 @@ namespace ActiveHenonMap
 
             // PaintCursorCircle(new Point(e.X, e.Y));
 
-            // Draw_Line_Dataset(pnlMain, myPoints.ConvertThisListToScreenCoordinates(pnlMain.Width, pnlMain.Height));
+            // Draw_Line_Dataset(pnlMain, myPoints.ConvertThisListToScreenCoordinates(pnlMain.Width, pnlMain.Height, mapData));
 
             // txtlocation.Text = $"# points: {pointsToColor.Count}\r\nX: {map_cursor_location.X.ToString("#,0.000")}, Y: {map_cursor_location.Y.ToString("#,0.000")}\r\nrange: {range}\r\nZoom: {_zoom}";
             // txtlocation.Refresh();
@@ -704,13 +809,32 @@ namespace ActiveHenonMap
 
         private void GetScreenValues()
         {
-            Utilities.SurfaceWidth = pnlMain.Width;
-            Utilities.SurfaceHeight = pnlMain.Height;
-            Utilities.MinX = myPoints.MinX;
-            Utilities.MaxX = myPoints.MaxX;
-            Utilities.MinY = myPoints.MinY;
-            Utilities.MaxY = myPoints.MaxY;
-            Utilities.SetRatios();
+            mapData = new HenonMapData(txtPhaseAngle.Text, txtStartingX.Text, txtStartingY.Text,
+                                       txtIncrementX.Text, txtIncrementY.Text, txtNumOrbits.Text, txtPointsPerOrbit.Text, 
+                                       txtBottom.Text, txtTop.Text, txtLeft.Text, txtRight.Text, 
+                                       pnlMain.Width.ToString(), pnlMain.Height.ToString());
+
+            Utilities.SetRatios(mapData);
+        }
+
+        private void SetScreenValues(double phAngle,
+                                     double startingX,  double startingY,
+                                     double incrX,      double incrY,
+                                     int    numOrbits,  int    ptsPerOrbit,
+                                     double minX,       double maxX,
+                                     double minY,       double maxY)
+        {
+            txtPhaseAngle.Text      = phAngle.ToString();
+            txtStartingX.Text       = startingX.ToString();
+            txtStartingY.Text       = startingY.ToString();
+            txtIncrementX.Text      = incrX.ToString();
+            txtIncrementY.Text      = incrY.ToString();
+            txtNumOrbits.Text       = numOrbits.ToString();
+            txtPointsPerOrbit.Text  = ptsPerOrbit.ToString();
+            txtRight.Text           = maxX.ToString();
+            txtLeft.Text            = minX.ToString();
+            txtTop.Text             = maxY.ToString();
+            txtBottom.Text          = minY.ToString();
         }
 
         /// <summary>
@@ -730,7 +854,7 @@ namespace ActiveHenonMap
             }
 
             // Get the size of the circle here
-            range = (myPoints.MinY - myPoints.MaxY) / _zoom;
+            range = (mapData.MinY - mapData.MaxY) / _zoom;
 
             // Get a list of the indecies of points in the circle
             List<int> pointsToColor = myPoints.GetNearbyPoints(cursor_pt.X, cursor_pt.Y, range);
@@ -747,5 +871,6 @@ namespace ActiveHenonMap
         }
 
         #endregion
+
     }
 }
